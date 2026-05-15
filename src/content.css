@@ -1,0 +1,551 @@
+/* src/content.css */
+
+#lpc-overlay {
+  position: fixed;
+  top: 80px;
+  left: 20px;
+  z-index: 99999;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+#lpc-panel {
+  width: 320px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+  overflow: hidden;
+  transform: translateX(-30px);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid #e5e7eb;
+}
+
+#lpc-panel.minimized #lpc-body {
+  display: none;
+}
+
+#lpc-header {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  user-select: none;
+}
+
+#lpc-header-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#lpc-logo {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.95;
+  flex: 1;
+}
+
+#lpc-minimize, #lpc-close {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+#lpc-minimize:hover, #lpc-close:hover { background: rgba(255,255,255,0.3); }
+
+#lpc-body {
+  max-height: 520px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+#lpc-loader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.lpc-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #0f172a;
+  border-radius: 50%;
+  animation: lpc-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes lpc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Profile strip */
+.lpc-profile-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.lpc-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e5e7eb;
+  flex-shrink: 0;
+  border: 2px solid #e5e7eb;
+}
+
+.lpc-profile-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.lpc-profile-headline {
+  font-size: 11.5px;
+  color: #6b7280;
+  margin-top: 2px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Sections */
+.lpc-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9ca3af;
+  padding: 10px 16px 6px;
+}
+
+.lpc-my-section {
+  padding: 0 16px 14px;
+}
+
+.lpc-recruiter-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+.lpc-recruiter-label strong { color: #0f172a; }
+
+.lpc-field-row {
+  margin-bottom: 10px;
+}
+
+.lpc-field-row label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lpc-select, .lpc-textarea {
+  width: 100%;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #f9fafb;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.lpc-select:focus, .lpc-textarea:focus {
+  border-color: #3b82f6;
+  background: #fff;
+}
+
+.lpc-textarea {
+  height: 60px;
+  resize: vertical;
+  min-height: 50px;
+}
+
+.lpc-btn-primary {
+  width: 100%;
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.lpc-btn-primary:hover { background: #1e293b; }
+.lpc-btn-primary:active { transform: scale(0.98); }
+.lpc-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.lpc-save-msg {
+  font-size: 12px;
+  margin-top: 7px;
+  min-height: 16px;
+  text-align: center;
+}
+.lpc-save-msg.success { color: #10b981; }
+.lpc-save-msg.error { color: #ef4444; }
+
+/* Other contacts */
+.lpc-others-section {
+  padding: 0 16px 16px;
+}
+
+.lpc-other-contact {
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 9px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.lpc-contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lpc-recruiter-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lpc-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lpc-contact-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 5px;
+}
+
+.lpc-contact-notes {
+  font-size: 11.5px;
+  color: #6b7280;
+  margin-top: 5px;
+  font-style: italic;
+  border-left: 2px solid #e5e7eb;
+  padding-left: 8px;
+}
+
+.lpc-empty-other {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 12px 0;
+  font-style: italic;
+}
+
+/* Highlight menu */
+#lpc-highlight-menu {
+  position: absolute;
+  z-index: 999999;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-width: 180px;
+}
+
+.lpc-hm-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 7px;
+}
+
+.lpc-hm-colors {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.lpc-hm-color {
+  width: 26px;
+  height: 26px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lpc-hm-color:hover, .lpc-hm-color.active {
+  transform: scale(1.15);
+  border-color: #fff;
+}
+
+.lpc-hm-notebtn {
+  width: 26px;
+  height: 26px;
+  background: #334155;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+  margin-left: 2px;
+}
+.lpc-hm-notebtn:hover { background: #475569; }
+
+.lpc-hm-note-area {
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  border-top: 1px solid #334155;
+  padding-top: 8px;
+}
+
+.lpc-hm-textarea {
+  width: 100%;
+  height: 55px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #f8fafc;
+  font-size: 12px;
+  padding: 6px 8px;
+  resize: none;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.lpc-hm-save {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Highlights in overlay */
+.lpc-highlight-hint {
+  font-size: 11.5px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+.lpc-highlight-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 7px;
+  position: relative;
+  padding-right: 28px;
+}
+
+.lpc-highlight-text {
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 2px 6px;
+  display: inline-block;
+  margin-bottom: 3px;
+}
+
+.lpc-highlight-note {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.lpc-highlight-del {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  background: none;
+  border: none;
+  color: #d1d5db;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.lpc-highlight-del:hover { color: #ef4444; background: #fee2e2; }
+
+/* Error & not-configured states */
+.lpc-error {
+  padding: 16px;
+  font-size: 13px;
+  color: #ef4444;
+  text-align: center;
+}
+
+.lpc-not-configured {
+  padding: 20px 16px;
+  text-align: center;
+}
+.lpc-nc-icon { font-size: 28px; margin-bottom: 8px; }
+.lpc-nc-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+.lpc-nc-desc { font-size: 12.5px; color: #6b7280; line-height: 1.5; }
+
+/* Highlight section */
+.lpc-highlight-section {
+  padding: 0 16px 14px;
+}
+
+.lpc-kw-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+  min-height: 4px;
+}
+
+.lpc-kw-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.lpc-kw-remove {
+  cursor: pointer;
+  font-size: 10px;
+  opacity: 0.7;
+  line-height: 1;
+}
+.lpc-kw-remove:hover { opacity: 1; }
+
+.lpc-kw-input-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.lpc-kw-input {
+  flex: 1;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: #0f172a;
+  background: #f9fafb;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.lpc-kw-input:focus { border-color: #3b82f6; background: #fff; }
+.lpc-kw-input::placeholder { color: #9ca3af; }
+
+.lpc-kw-add-btn {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 7px;
+  width: 30px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #374151;
+  font-weight: 400;
+  transition: background 0.15s;
+  padding: 0 0 2px;
+}
+.lpc-kw-add-btn:hover { background: #d1d5db; }
+
+.lpc-highlight-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.lpc-btn-highlight {
+  flex: 1;
+  background: #0f172a;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.lpc-btn-highlight:hover { background: #1e293b; }
+.lpc-btn-highlight.active {
+  background: #f59e0b;
+  color: #78350f;
+}
+
+.lpc-btn-clear {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.lpc-btn-clear:hover { background: #e5e7eb; color: #374151; }

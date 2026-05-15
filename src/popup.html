@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LinkedIn Profile Checker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #070b10;
+      color: #c8daea;
+      min-height: 100px;
+    }
+
+    /* ── Header ── */
+    .app-header {
+      background: linear-gradient(135deg, #0c1219, #0f2040);
+      padding: 13px 16px;
+      border-bottom: 1px solid #1a2840;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .app-logo { font-size: 18px; }
+    .app-title { font-size: 14px; font-weight: 700; color: #e2eaf4; }
+    .app-sub { font-size: 10px; color: #3d5e78; margin-top: 1px; font-family: 'Courier New', monospace; }
+
+    /* ── Screen manager ── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── Login screen ── */
+    #screen-login { padding: 20px 18px; }
+
+    .login-title {
+      font-size: 13px; font-weight: 700; color: #c8daea;
+      margin-bottom: 4px;
+    }
+    .login-sub {
+      font-size: 11px; color: #3d5e78;
+      margin-bottom: 18px; line-height: 1.5;
+    }
+
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: #3d5e78; margin-bottom: 5px;
+    }
+    .field input {
+      width: 100%;
+      background: #0c1219; border: 1.5px solid #1a2840;
+      border-radius: 6px; padding: 9px 11px;
+      font-size: 13px; color: #e2eaf4;
+      outline: none; font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: #00d4ff; }
+    .field input::placeholder { color: #1a2840; }
+
+    .btn-login {
+      width: 100%; padding: 10px; border: none;
+      border-radius: 7px; font-size: 13px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      background: #00d4ff; color: #070b10;
+      transition: opacity 0.15s;
+      letter-spacing: 0.02em;
+    }
+    .btn-login:hover { opacity: 0.85; }
+    .btn-login:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .login-err {
+      font-size: 11px; color: #ef4444;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 5px; padding: 7px 10px;
+      margin-top: 10px; display: none;
+    }
+
+    .signup-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; margin-top: 14px;
+    }
+    .signup-row span { font-size: 11px; color: #3d5e78; }
+    .signup-link {
+      font-size: 11px; color: #00d4ff;
+      cursor: pointer; font-weight: 600;
+      background: none; border: none; font-family: inherit;
+      padding: 0; text-decoration: underline;
+    }
+    .signup-link:hover { opacity: 0.8; }
+
+    /* ── Main screen (tabs) ── */
+    #screen-main {}
+
+    /* User bar */
+    .user-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 14px; background: #0c1219;
+      border-bottom: 1px solid #1a2840;
+    }
+    .user-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 5px #10b981; flex-shrink: 0; }
+    .user-info { flex: 1; }
+    .user-name { font-size: 12px; font-weight: 700; color: #e2eaf4; }
+    .user-email { font-size: 10px; color: #3d5e78; font-family: 'Courier New', monospace; }
+    .logout-btn {
+      font-size: 10px; color: #3d5e78; cursor: pointer;
+      background: none; border: none; font-family: inherit;
+      padding: 4px 7px; border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .logout-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+    /* Tabs */
+    .tabs {
+      display: flex; background: #0c1219;
+      border-bottom: 1px solid #1a2840;
+    }
+    .tab {
+      flex: 1; padding: 9px 6px; text-align: center;
+      font-size: 11px; font-weight: 600; color: #3d5e78;
+      cursor: pointer; border: none; background: none;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      font-family: inherit; letter-spacing: 0.03em;
+    }
+    .tab.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+
+    .tab-panel { display: none; padding: 14px 16px; }
+    .tab-panel.active { display: block; }
+
+    /* Status card */
+    .status-card {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; background: #0c1219;
+      border: 1px solid #1a2840; border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.green { background: #10b981; box-shadow: 0 0 5px #10b981; }
+    .status-dot.yellow { background: #f59e0b; animation: blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .status-text { font-size: 11px; color: #7a9bb8; flex: 1; }
+    .status-text strong { color: #e2eaf4; }
+
+    /* Section label */
+    .sec-label {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: #3d5e78; margin-bottom: 7px;
+    }
+
+    /* Recruiter list */
+    .rec-list { max-height: 180px; overflow-y: auto; margin-bottom: 12px; }
+    .rec-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 11px; background: #0c1219;
+      border: 1px solid #1a2840; border-radius: 7px;
+      margin-bottom: 4px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .rec-item:hover { border-color: #00d4ff30; }
+    .rec-item.selected { border-color: #00d4ff; background: #0c2030; }
+    .rec-name { font-size: 12px; font-weight: 700; color: #e2eaf4; }
+    .rec-name em { font-style: normal; color: #00d4ff; }
+    .rec-email { font-size: 10px; color: #3d5e78; margin-top: 1px; }
+    .rec-check { color: #00d4ff; font-size: 14px; }
+
+    /* Add form */
+    .add-form { border-top: 1px solid #1a2840; padding-top: 12px; }
+    .row2 { display: flex; gap: 8px; }
+    .row2 .field { flex: 1; }
+
+    .mini-field input {
+      background: #0c1219; border: 1.5px solid #1a2840;
+      border-radius: 6px; padding: 7px 10px;
+      font-size: 12px; color: #e2eaf4; outline: none;
+      font-family: inherit; transition: border-color 0.15s; width: 100%;
+    }
+    .mini-field input:focus { border-color: #00d4ff; }
+    .mini-field input::placeholder { color: #1a2840; }
+    .mini-field label {
+      display: block; font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: #3d5e78; margin-bottom: 4px;
+    }
+
+    .btn-add {
+      width: 100%; padding: 8px; border: 1px solid #1a2840;
+      border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: inherit; color: #7a9bb8;
+      background: #0c1219; transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-add:hover { border-color: #3d5e78; color: #e2eaf4; }
+    .btn-add:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .flash { font-size: 11px; text-align: center; min-height: 15px; margin-top: 7px; }
+    .flash.ok  { color: #10b981; }
+    .flash.err { color: #ef4444; }
+
+    /* ── Keywords tab ── */
+    .kw-list { margin-bottom: 12px; max-height: 200px; overflow-y: auto; }
+    .kw-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 11px; background: #0c1219;
+      border: 1px solid #1a2840; border-radius: 7px;
+      margin-bottom: 4px;
+    }
+    .kw-word {
+      font-size: 12px; font-weight: 600;
+      padding: 2px 8px; border-radius: 3px;
+    }
+    .kw-del {
+      background: none; border: none; color: #3d5e78;
+      cursor: pointer; font-size: 13px; padding: 2px 5px;
+      border-radius: 4px; transition: color 0.15s, background 0.15s;
+    }
+    .kw-del:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+    .kw-add-row {
+      display: flex; gap: 7px; margin-top: 10px;
+    }
+    .kw-add-row input {
+      flex: 1; background: #0c1219; border: 1.5px solid #1a2840;
+      border-radius: 6px; padding: 7px 10px;
+      font-size: 12px; color: #e2eaf4; outline: none;
+      font-family: inherit; transition: border-color 0.15s;
+    }
+    .kw-add-row input:focus { border-color: #00d4ff; }
+    .kw-add-row input::placeholder { color: #1a2840; }
+
+    .color-dots { display: flex; gap: 5px; align-items: center; }
+    .color-dot {
+      width: 18px; height: 18px; border-radius: 4px;
+      cursor: pointer; border: 2px solid transparent;
+      transition: border-color 0.1s, transform 0.1s; flex-shrink: 0;
+    }
+    .color-dot.active { border-color: #e2eaf4; transform: scale(1.2); }
+
+    .empty-kw { font-size: 11px; color: #3d5e78; text-align: center; padding: 16px 0; font-style: italic; }
+  </style>
+</head>
+<body>
+
+  <!-- ── App header ── -->
+  <div class="app-header">
+    <div class="app-logo">◈</div>
+    <div>
+      <div class="app-title">Profile Checker</div>
+      <div class="app-sub" id="app-sub">AUTHENTICATING…</div>
+    </div>
+  </div>
+
+  <!-- ── LOGIN SCREEN ── -->
+  <div class="screen" id="screen-login">
+    <div id="screen-login" style="padding: 20px 18px">
+      <div class="login-title">Sign in to continue</div>
+      <div class="login-sub">Use your team account credentials.</div>
+
+      <div class="field">
+        <label>Email</label>
+        <input id="login-email" type="email" placeholder="you@company.com" autocomplete="email" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+
+      <button class="btn-login" id="login-btn">Sign In →</button>
+      <div class="login-err" id="login-err"></div>
+
+      <div class="signup-row">
+        <span>Don't have an account?</span>
+        <button class="signup-link" id="signup-btn">Sign up here</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN SCREEN ── -->
+  <div class="screen" id="screen-main">
+
+    <!-- User bar -->
+    <div class="user-bar">
+      <div class="user-dot"></div>
+      <div class="user-info">
+        <div class="user-name" id="user-name-label">—</div>
+        <div class="user-email" id="user-email-label">—</div>
+      </div>
+      <button class="logout-btn" id="logout-btn">Sign out</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="accounts">👤 Accounts</button>
+      <button class="tab" data-tab="keywords">🖊 Keywords</button>
+    </div>
+
+    <!-- ── ACCOUNTS TAB ── -->
+    <div class="tab-panel active" id="tab-accounts">
+
+      <!-- Active account status -->
+      <div class="status-card">
+        <div class="status-dot yellow" id="status-dot"></div>
+        <div class="status-text" id="status-text">Select an account below</div>
+      </div>
+
+      <div class="sec-label">Your Accounts</div>
+      <div class="rec-list" id="rec-list">
+        <div style="font-size:11px;color:#3d5e78;text-align:center;padding:12px 0">Loading…</div>
+      </div>
+
+      <!-- Add account form -->
+      <div class="add-form">
+        <div class="sec-label">+ New Account</div>
+        <div class="row2">
+          <div class="mini-field"><label>Name</label><input id="new-name" type="text" placeholder="Daria" /></div>
+          <div class="mini-field"><label>Company</label><input id="new-company" type="text" placeholder="TechHunt" /></div>
+        </div>
+        <div class="mini-field" style="margin-top:8px;margin-bottom:8px"><label>Email (opt)</label><input id="new-email" type="email" placeholder="daria@co.com" /></div>
+        <button class="btn-add" id="add-rec-btn">Add Account</button>
+        <div class="flash" id="rec-flash"></div>
+      </div>
+    </div>
+
+    <!-- ── KEYWORDS TAB ── -->
+    <div class="tab-panel" id="tab-keywords">
+      <div class="sec-label">Auto-Highlight Keywords</div>
+      <div style="font-size:11px;color:#3d5e78;margin-bottom:10px;line-height:1.5">
+        These words will be highlighted on every webpage you visit.
+      </div>
+
+      <div class="kw-list" id="kw-list">
+        <div class="empty-kw">No keywords yet.</div>
+      </div>
+
+      <div class="sec-label">Add Keyword</div>
+      <div class="color-dots" id="color-picker" style="margin-bottom:8px"></div>
+      <div class="kw-add-row">
+        <input id="kw-input" type="text" placeholder="e.g. React, Python…" />
+        <button class="btn-add" id="kw-add-btn" style="width:auto;padding:7px 14px">Add</button>
+      </div>
+      <div class="flash" id="kw-flash"></div>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
