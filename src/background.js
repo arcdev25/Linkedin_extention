@@ -162,7 +162,7 @@ async function handleGetMyRecruiters(ownerId) {
 async function handleGetProfile(linkedinId) {
   const { req } = getClient();
   const profiles = await req(
-    `profiles?linkedin_id=eq.${encodeURIComponent(linkedinId)}&select=*,contacts(*,recruiters(id,name,company,email))`
+    `profiles?linkedin_id=eq.${encodeURIComponent(linkedinId)}&select=*,contacts(*,recruiters(id,name,company,email,owners(name)))`
   );
   return { profile: profiles?.[0] || null };
 }

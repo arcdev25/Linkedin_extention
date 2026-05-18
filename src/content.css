@@ -69,7 +69,7 @@
 #lpc-minimize:hover, #lpc-close:hover { background: rgba(255,255,255,0.3); }
 
 #lpc-body {
-  max-height: 520px;
+  max-height: 950px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
