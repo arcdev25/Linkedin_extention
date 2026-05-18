@@ -159,7 +159,7 @@
       text.length < 2 ||
       text.length > 120 ||
       blocked.has(lower) ||
-      lower.includes('linkedin profile checker') ||
+      lower.includes('linkedin profile insight') ||
       /^profile\s+/i.test(text) ||
       /^(message|connect|follow|more)$/i.test(text);
   }
@@ -188,7 +188,7 @@
     if (/^(?:open to|verified|premium|linkedin premium)\b/i.test(text)) return true;
     if (/^(?:about|activity|experience|education|licenses & certifications|recommendations|interests)$/i.test(text)) return true;
     if (/^view .+ profile on linkedin/i.test(lower)) return true;
-    if (lower.includes('linkedin profile checker')) return true;
+    if (lower.includes('linkedin profile insight')) return true;
 
     return false;
   }
