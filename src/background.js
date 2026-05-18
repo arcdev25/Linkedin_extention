@@ -27,6 +27,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'ADD_KEYWORD')       { handleAddKeyword(msg.ownerId, msg.word, msg.colorId).then(sendResponse).catch(e => sendResponse({ error: e.message })); return true; }
   if (msg.type === 'DELETE_KEYWORD')    { handleDeleteKeyword(msg.id).then(sendResponse).catch(e => sendResponse({ error: e.message })); return true; }
   if (msg.type === 'GET_KEYWORDS_FOR_PAGE') { handleGetKeywordsForPage().then(sendResponse).catch(e => sendResponse({ error: e.message })); return true; }
+  if (msg.type === 'CHECK_GOOGLE_SHEET_URL') {
+    const scriptUrl = 'https://script.google.com/macros/s/AKfycbwzzEBS8iI7zYVmEzHKrtqq53-SmSf8Qw5Cb3FSZakHdAjiS_Oi4DlTJiA5nU9x20bA3w/exec';
+
+    fetch(`${scriptUrl}?url=${encodeURIComponent(msg.url)}`)
+      .then(res => res.json())
+      .then(data => {
+        sendResponse({ exists: data.exists });
+        console.log('data.exists------------', data.exists)
+      })
+      .catch(err => {
+        console.error('Google Sheet check error:', err);
+        sendResponse({ exists: false, error: err.message });
+      });
+
+    return true;
+  }
 });
 
 // ─── Supabase client ─────────────────────────────────────────────────────────
@@ -162,7 +178,7 @@ async function handleGetMyRecruiters(ownerId) {
 async function handleGetProfile(linkedinId) {
   const { req } = getClient();
   const profiles = await req(
-    `profiles?linkedin_id=eq.${encodeURIComponent(linkedinId)}&select=*,contacts(*,recruiters(id,name,company,email,owners(name)))`
+    `profiles?linkedin_id=eq.${encodeURIComponent(linkedinId)}&select=*,contacts(*,recruiters(id,name,company,email))`
   );
   return { profile: profiles?.[0] || null };
 }
@@ -245,3 +261,5 @@ async function handleGetKeywordsForPage() {
   const kws = await req(`keywords?owner_id=eq.${session.id}&select=*`);
   return { keywords: kws || [] };
 }
+
+

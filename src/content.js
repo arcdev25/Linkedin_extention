@@ -36,19 +36,7 @@
       parseHeadlineFromDescription(description, name)
     ], name);
 
-    // Avatar: check aria-label="Profile photo" div first (confirmed in real LinkedIn HTML)
-    // then img[src*="profile-displayphoto"] which is the direct src pattern
-    const _photoDiv = document.querySelector('div[aria-label="Profile photo"], a[aria-label="Profile photo"]');
-    const _photoImg = _photoDiv
-      ? (_photoDiv.querySelector('img[src*="profile-displayphoto"]') ||
-         _photoDiv.querySelector('img[src*="media.licdn.com"]') ||
-         _photoDiv.querySelector('img'))
-      : null;
-    const _displayPhotoImg = document.querySelector('img[src*="profile-displayphoto"]');
-
     const avatar = firstUrl([
-      _photoImg?.src,
-      _displayPhotoImg?.src,
       findAvatarNearName(nameHeading, name),
       document.querySelector('.pv-top-card__photo img')?.src,
       document.querySelector('img.profile-photo-edit__preview')?.src,
@@ -159,7 +147,7 @@
       text.length < 2 ||
       text.length > 120 ||
       blocked.has(lower) ||
-      lower.includes('linkedin profile insight') ||
+      lower.includes('linkedin profile checker') ||
       /^profile\s+/i.test(text) ||
       /^(message|connect|follow|more)$/i.test(text);
   }
@@ -188,7 +176,7 @@
     if (/^(?:open to|verified|premium|linkedin premium)\b/i.test(text)) return true;
     if (/^(?:about|activity|experience|education|licenses & certifications|recommendations|interests)$/i.test(text)) return true;
     if (/^view .+ profile on linkedin/i.test(lower)) return true;
-    if (lower.includes('linkedin profile insight')) return true;
+    if (lower.includes('linkedin profile checker')) return true;
 
     return false;
   }
@@ -210,21 +198,6 @@
   }
 
   function findNameHeading(scope) {
-    // Priority: h2 near the profile photo div (confirmed in real LinkedIn HTML)
-    const photoArea = document.querySelector('div[aria-label="Profile photo"], a[aria-label="Profile photo"]');
-    if (photoArea) {
-      // Walk up to find containing section/div, then find h2
-      let el = photoArea.parentElement;
-      for (let i = 0; i < 12 && el && el !== document.body; i++) {
-        const h2 = el.querySelector('h2');
-        if (h2 && isVisible(h2)) {
-          const txt = readHeadingText(h2);
-          if (!isBadName(txt)) return h2;
-        }
-        el = el.parentElement;
-      }
-    }
-
     const candidates = uniqueElements([
       ...scope.querySelectorAll('[data-anonymize="person-name"]'),
       ...scope.querySelectorAll('h1, h2')
@@ -254,22 +227,6 @@
   }
 
   function findHeadlineNearName(nameEl, name) {
-    // New LinkedIn layout: headline is a <p> sibling of the h2 container
-    // Walk up from nameEl to find sibling <p> tags
-    if (nameEl) {
-      let container = nameEl.parentElement;
-      for (let i = 0; i < 6 && container; i++) {
-        const paras = Array.from(container.querySelectorAll('p'));
-        for (const p of paras) {
-          if (!isVisible(p)) continue;
-          const txt = cleanText(p.innerText || p.textContent || '');
-          if (!isBadHeadline(txt, name) && txt.length > 10) return txt;
-        }
-        container = container.parentElement;
-      }
-    }
-
-    // Fallback: text-based scan
     const container = findProfileContainer(nameEl);
     const lines = readLines(container);
     const cleanName = cleanProfileName(name);
@@ -422,12 +379,8 @@
 
     const cleanName = cleanProfileName(name).toLowerCase();
     let score = 1;
-    // Highest priority: URL contains profile-displayphoto (confirmed LinkedIn pattern)
-    if (/profile-displayphoto/i.test(img.src)) score += 15;
     if (cleanName && alt.toLowerCase().includes(cleanName)) score += 8;
     if (/\b(?:profile|photo|picture)\b/i.test(haystack)) score += 5;
-    // Boost if inside div[aria-label="Profile photo"]
-    if (img.closest('[aria-label*="Profile photo" i]')) score += 10;
     if (classText.includes('top-card')) score += 3;
     if (classText.includes('profile')) score += 3;
     if (Math.abs(width - height) <= Math.max(width, height) * 0.35) score += 2;
@@ -703,112 +656,123 @@
 
   // ─── Overlay ──────────────────────────────────────────────────────────────────
 
-function createOverlay() {
-  const el = document.createElement('div');
-  el.id = 'lpc-overlay';
-  el.innerHTML = `
-    <div id="lpc-panel">
-      <div id="lpc-header">
-        <span id="lpc-logo">Loading...</span>
-        <div id="lpc-header-controls">
-          <button id="lpc-minimize" title="Minimize">−</button>
-          <button id="lpc-close" title="Close">✕</button>
+  function createOverlay() {
+    const el = document.createElement('div');
+    el.id = 'lpc-overlay';
+    el.innerHTML = `
+      <div id="lpc-panel">
+        <div id="lpc-header">
+          <span id="lpc-logo">◈ Profile Checker</span>
+          <div id="lpc-header-controls">
+            <button id="lpc-minimize" title="Minimize">−</button>
+            <button id="lpc-close" title="Close">✕</button>
+          </div>
+        </div>
+        <div id="lpc-body">
+          <div id="lpc-loader"><div class="lpc-spinner"></div><span>Loading…</span></div>
+          <div id="lpc-content" style="display:none"></div>
         </div>
       </div>
-      <div id="lpc-body">
-        <div id="lpc-loader"><div class="lpc-spinner"></div><span>Loading…</span></div>
-        <div id="lpc-content" style="display:none"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(el);
-  
-  // Close button
-  el.querySelector('#lpc-close').addEventListener('click', () => {
-    el.style.opacity = '0';
-    setTimeout(() => { el.remove(); overlayEl = null; }, 200);
-  });
-  
-  // Minimize button
-  const panel = el.querySelector('#lpc-panel');
-  const minimizeBtn = el.querySelector('#lpc-minimize');
-  minimizeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    panel.classList.toggle('minimized');
-    minimizeBtn.textContent = panel.classList.contains('minimized') ? '+' : '−';
-    minimizeBtn.title = panel.classList.contains('minimized') ? 'Maximize' : 'Minimize';
-  });
-  
-  // Drag functionality
-  const header = el.querySelector('#lpc-header');
-  let isDragging = false;
-  let currentX, currentY, initialX, initialY;
-  
-  header.addEventListener('mousedown', (e) => {
-    // Don't drag if clicking on buttons
-    if (e.target.closest('#lpc-header-controls')) return;
+    `;
+    document.body.appendChild(el);
     
-    isDragging = true;
-    const rect = el.getBoundingClientRect();
-    initialX = e.clientX - rect.left;
-    initialY = e.clientY - rect.top;
+    // Close button
+    el.querySelector('#lpc-close').addEventListener('click', () => {
+      el.style.opacity = '0';
+      setTimeout(() => { el.remove(); overlayEl = null; }, 200);
+    });
     
-    header.style.cursor = 'grabbing';
-  });
-  
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    e.preventDefault();
+    // Minimize button
+    const panel = el.querySelector('#lpc-panel');
+    const minimizeBtn = el.querySelector('#lpc-minimize');
+    minimizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.classList.toggle('minimized');
+      minimizeBtn.textContent = panel.classList.contains('minimized') ? '+' : '−';
+      minimizeBtn.title = panel.classList.contains('minimized') ? 'Maximize' : 'Minimize';
+    });
     
-    currentX = e.clientX - initialX;
-    currentY = e.clientY - initialY;
+    // Drag functionality
+    const header = el.querySelector('#lpc-header');
+    let isDragging = false;
+    let currentX, currentY, initialX, initialY;
     
-    // Keep within viewport bounds
-    const maxX = window.innerWidth - panel.offsetWidth;
-    const maxY = window.innerHeight - 50; // At least header visible
+    header.addEventListener('mousedown', (e) => {
+      // Don't drag if clicking on buttons
+      if (e.target.closest('#lpc-header-controls')) return;
+      
+      isDragging = true;
+      const rect = el.getBoundingClientRect();
+      initialX = e.clientX - rect.left;
+      initialY = e.clientY - rect.top;
+      
+      header.style.cursor = 'grabbing';
+    });
     
-    currentX = Math.max(0, Math.min(currentX, maxX));
-    currentY = Math.max(0, Math.min(currentY, maxY));
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      currentX = e.clientX - initialX;
+      currentY = e.clientY - initialY;
+      
+      // Keep within viewport bounds
+      const maxX = window.innerWidth - panel.offsetWidth;
+      const maxY = window.innerHeight - 50; // At least header visible
+      
+      currentX = Math.max(0, Math.min(currentX, maxX));
+      currentY = Math.max(0, Math.min(currentY, maxY));
+      
+      el.style.left = currentX + 'px';
+      el.style.top = currentY + 'px';
+    });
     
-    el.style.left = currentX + 'px';
-    el.style.top = currentY + 'px';
-  });
-  
-  document.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      header.style.cursor = 'move';
-    }
-  });
-  
-  return el;
-}
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        header.style.cursor = 'move';
+      }
+    });
+    
+    return el;
+  }
 
-  function renderContent(profileData, dbData, config) {
+// check blocklist from google sheet
+  async function checkGoogleSheetUrl() {
+    const match = location.pathname.match(/^\/in\/([^/?#]+)/);
+
+    if (!match) return false;
+
+    const linkedinId = match[1];
+    const cleanUrl = `https://www.linkedin.com/in/${linkedinId}/`;
+
+    const resp = await chrome.runtime.sendMessage({
+      type: 'CHECK_GOOGLE_SHEET_URL',
+      url: cleanUrl
+    });
+    console.log('isExist--', resp)
+    return resp?.exists === true;
+  }
+
+function renderContent(profileData, dbData, config, existingBlocklist) {
     const { contacts } = dbData;
     const myContact = contacts?.find(c => c.recruiter_id === config.current_recruiter_id);
     const otherContacts = contacts?.filter(c => c.recruiter_id !== config.current_recruiter_id) || [];
+    
+    const blocklistIcon = `<svg class="lpc-blocklist-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30" style="display:inline-block;vertical-align:middle;margin-right:6px;"><path fill="#A82C1F" fill-rule="nonzero" d="M256 0c70.686 0 134.69 28.658 181.016 74.984C483.342 121.31 512 185.314 512 256c0 70.686-28.658 134.69-74.984 181.016C390.69 483.342 326.686 512 256 512c-70.686 0-134.69-28.658-181.016-74.984C28.658 390.69 0 326.686 0 256c0-70.686 28.658-134.69 74.984-181.016C121.31 28.658 185.314 0 256 0z"/><circle fill="#D03827" cx="256" cy="256" r="226.536"/><path fill="#fff" fill-rule="nonzero" d="M275.546 302.281c-.88 22.063-38.246 22.092-39.099-.007-3.779-37.804-13.444-127.553-13.136-163.074.312-10.946 9.383-17.426 20.99-19.898 3.578-.765 7.512-1.136 11.476-1.132 3.987.007 7.932.4 11.514 1.165 11.989 2.554 21.402 9.301 21.398 20.444l-.044 1.117-13.099 161.385zm-19.55 39.211c14.453 0 26.168 11.717 26.168 26.171 0 14.453-11.715 26.167-26.168 26.167s-26.171-11.714-26.171-26.167c0-14.454 11.718-26.171 26.171-26.171z"/></svg>`;
 
     const statusOptions = Object.entries(STATUS_CONFIG)
       .map(([key, v]) => `<option value="${key}" ${myContact?.status === key ? 'selected' : ''}>${v.icon} ${v.label}</option>`)
       .join('');
 
-    const needConnectionStatus = { label: 'Need Connection', color: '#D97706', bg: '#FEF3C7', icon: '🔗' };
-
     const otherHtml = otherContacts.length
       ? otherContacts.map(c => {
-          const hasRecruiter = c.recruiters && (c.recruiters.name || c.recruiters.company);
-          const recruiterLabel = hasRecruiter
-            ? (c.recruiters.company ? `${c.recruiters.name}'s ${c.recruiters.company}` : c.recruiters.name)
-            : (c.recruiters?.owners?.name || 'Unknown');
-          const s = hasRecruiter
-            ? (STATUS_CONFIG[c.status] || STATUS_CONFIG.pending)
-            : needConnectionStatus;
+          const s = STATUS_CONFIG[c.status] || STATUS_CONFIG.pending;
           const date = c.contacted_at ? new Date(c.contacted_at).toLocaleDateString() : '—';
           return `
             <div class="lpc-other-contact">
               <div class="lpc-contact-row">
-                <span class="lpc-recruiter-name">👤 ${recruiterLabel}</span>
+                <span class="lpc-recruiter-name">👤 ${c.recruiters ? (c.recruiters.company ? `${c.recruiters.name}'s ${c.recruiters.company}` : c.recruiters.name) : 'Unknown'}</span>
                 <span class="lpc-badge" style="background:${s.bg};color:${s.color}">${s.icon} ${s.label}</span>
               </div>
               <div class="lpc-contact-meta">First: ${date}</div>
@@ -825,7 +789,21 @@ function createOverlay() {
           <div class="lpc-profile-headline">${profileData.headline || 'No headline available'}</div>
         </div>
       </div>
+
+      <div class="lpc-section-title">Your Outreach</div>
       <div class="lpc-my-section">
+        <div class="lpc-recruiter-label">Logged as: <strong>${config.current_recruiter_name || '—'}</strong></div>
+        
+        ${existingBlocklist ? `
+          <div class="lpc-blocklist-warning">
+            ${blocklistIcon}
+                            <span>This profile is in your blocklist</span>
+          </div>
+        ` : `
+          <div class="lpc-section-title">Other Recruiters (${otherContacts.length})</div>
+          <div class="lpc-others-section">${otherHtml}</div>
+        `}
+        
         <div class="lpc-field-row">
           <label>Status</label>
           <select id="lpc-status-select" class="lpc-select">${statusOptions}</select>
@@ -836,92 +814,81 @@ function createOverlay() {
         </div>
         <button id="lpc-save-btn" class="lpc-btn-primary">${myContact ? '💾 Update' : '➕ Add Contact'}</button>
         <div id="lpc-save-msg" class="lpc-save-msg"></div>
-      </div>
-
-      <div class="lpc-section-title">Other Recruiters (${otherContacts.length})</div>
-      <div class="lpc-others-section">${otherHtml}</div>
+      </div>      
     `;
-  }
+}
 
-async function loadOverlayData() {
-  if (!overlayEl) return;
-  const content = overlayEl.querySelector('#lpc-content');
-  const loader = overlayEl.querySelector('#lpc-loader');
-  const logoEl = overlayEl.querySelector('#lpc-logo');
+  async function loadOverlayData() {
+    if (!overlayEl) return;
+    const content = overlayEl.querySelector('#lpc-content');
+    const loader = overlayEl.querySelector('#lpc-loader');
+    const existingBlocklist = await checkGoogleSheetUrl()
+    loader.style.display = 'flex';
+    content.style.display = 'none';
 
-  loader.style.display = 'flex';
-  content.style.display = 'none';
+    try {
+      let profileData = await waitForProfileData();
+      const linkedinId = getLinkedInId();
 
-  try {
-    let profileData = await waitForProfileData();
-    const linkedinId = getLinkedInId();
+      // Log extracted data for debugging
+      console.log('[ProfileChecker] Extracted profile data:', profileData);
 
-    // Log extracted data for debugging
-    console.log('[ProfileChecker] Extracted profile data:', profileData);
+      const [configResp, profileResp] = await Promise.all([
+        msg('GET_CONFIG'),
+        msg('GET_PROFILE', { linkedinId })
+      ]);
 
-    const [configResp, profileResp] = await Promise.all([
-      msg('GET_CONFIG'),
-      msg('GET_PROFILE', { linkedinId })
-    ]);
-
-    // Update header with recruiter name
-    if (configResp.current_recruiter_name) {
-      logoEl.innerHTML = `◈ ${configResp.current_recruiter_name}`;
-    } else {
-      logoEl.innerHTML = `◈ Your Outreach`;
-    }
-
-    if (!configResp.supabase_url) {
-      content.innerHTML = `<div class="lpc-not-configured"><div class="lpc-nc-icon">⚙️</div><div class="lpc-nc-title">Not Configured</div><div class="lpc-nc-desc">Click the extension icon to set up Supabase.</div></div>`;
-      loader.style.display = 'none';
-      content.style.display = 'block';
-      return;
-    }
-
-    profileData = mergeProfileData(profileData, profileResp.profile);
-    const contacts = profileResp.profile?.contacts || [];
-    content.innerHTML = renderContent(profileData, { contacts }, configResp);
-
-    content.querySelector('#lpc-save-btn').addEventListener('click', async () => {
-      const status = content.querySelector('#lpc-status-select').value;
-      const notes = content.querySelector('#lpc-notes').value;
-      const saveMsg = content.querySelector('#lpc-save-msg');
-      const btn = content.querySelector('#lpc-save-btn');
-
-      if (!configResp.current_recruiter_id) {
-        saveMsg.textContent = '⚠️ Set your recruiter account first.';
-        saveMsg.className = 'lpc-save-msg error';
+      if (!configResp.supabase_url) {
+        content.innerHTML = `<div class="lpc-not-configured"><div class="lpc-nc-icon">⚙️</div><div class="lpc-nc-title">Not Configured</div><div class="lpc-nc-desc">Click the extension icon to set up Supabase.</div></div>`;
+        loader.style.display = 'none';
+        content.style.display = 'block';
         return;
       }
 
-      btn.disabled = true; btn.textContent = 'Saving…';
-      try {
-        await msg('UPSERT_CONTACT', {
-          data: { ...profileData, recruiterId: configResp.current_recruiter_id, status, notes }
-        });
-        saveMsg.textContent = '✅ Saved!';
-        saveMsg.className = 'lpc-save-msg success';
-        btn.textContent = '💾 Update';
-        setTimeout(() => loadOverlayData(), 1000);
-      } catch (e) {
-        saveMsg.textContent = `❌ Error: ${e.message}`;
-        saveMsg.className = 'lpc-save-msg error';
-        btn.textContent = '💾 Update';
-        btn.disabled = false;
-      }
-    });
+      profileData = mergeProfileData(profileData, profileResp.profile);
+      const contacts = profileResp.profile?.contacts || [];
+      content.innerHTML = renderContent(profileData, { contacts }, configResp, existingBlocklist);
 
-    loader.style.display = 'none';
-    content.style.display = 'block';
-    loadHighlightsSection();
+      content.querySelector('#lpc-save-btn').addEventListener('click', async () => {
+        const status = content.querySelector('#lpc-status-select').value;
+        const notes = content.querySelector('#lpc-notes').value;
+        const saveMsg = content.querySelector('#lpc-save-msg');
+        const btn = content.querySelector('#lpc-save-btn');
 
-  } catch (e) {
-    console.error('[ProfileChecker] Error loading overlay:', e);
-    content.innerHTML = `<div class="lpc-error">⚠️ ${e.message}</div>`;
-    loader.style.display = 'none';
-    content.style.display = 'block';
+        if (!configResp.current_recruiter_id) {
+          saveMsg.textContent = '⚠️ Set your recruiter account first.';
+          saveMsg.className = 'lpc-save-msg error';
+          return;
+        }
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          await msg('UPSERT_CONTACT', {
+            data: { ...profileData, recruiterId: configResp.current_recruiter_id, status, notes }
+          });
+          saveMsg.textContent = '✅ Saved!';
+          saveMsg.className = 'lpc-save-msg success';
+          btn.textContent = '💾 Update';
+          setTimeout(() => loadOverlayData(), 1000);
+        } catch (e) {
+          saveMsg.textContent = `❌ Error: ${e.message}`;
+          saveMsg.className = 'lpc-save-msg error';
+          btn.textContent = '💾 Update';
+          btn.disabled = false;
+        }
+      });
+
+      loader.style.display = 'none';
+      content.style.display = 'block';
+      loadHighlightsSection();
+
+    } catch (e) {
+      console.error('[ProfileChecker] Error loading overlay:', e);
+      content.innerHTML = `<div class="lpc-error">⚠️ ${e.message}</div>`;
+      loader.style.display = 'none';
+      content.style.display = 'block';
+    }
   }
-}
 
   function checkAndInject() {
     const id = getLinkedInId();

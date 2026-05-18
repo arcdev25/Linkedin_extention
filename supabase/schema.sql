@@ -1,5 +1,5 @@
 -- ============================================================
--- LinkedIn Profile Insight — Supabase Schema v1.2
+-- LinkedIn Profile Checker — Supabase Schema v1.2
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
