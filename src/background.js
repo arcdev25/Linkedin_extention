@@ -137,22 +137,32 @@ async function handleLogin(email, password) {
 }
 
 async function handleLogout() {
-  await chrome.storage.local.remove(['session', 'current_recruiter_id', 'current_recruiter_name']);
+  await chrome.storage.local.remove(['session', 'current_recruiter_id', 'current_recruiter_name', 'session_validated_at']);
   return { ok: true };
 }
 
 async function handleGetSession() {
   return new Promise(res => {
-    chrome.storage.local.get(['session'], result => {
+    chrome.storage.local.get(['session', 'session_validated_at'], result => {
       if (!result.session) { res({ session: null }); return; }
-      // Re-validate: check owner is still active
+
+      // Re-validate at most once every 5 minutes to avoid a Supabase round-trip
+      // on every popup open. If the tab is offline we trust the cached session.
+      const now = Date.now();
+      const lastValidated = result.session_validated_at || 0;
+      if (now - lastValidated < 5 * 60 * 1000) {
+        res({ session: result.session });
+        return;
+      }
+
       const { req } = getClient();
       req(`owners?id=eq.${result.session.id}&select=status`)
         .then(rows => {
           if (!rows || rows.length === 0 || rows[0].status !== 'active') {
-            chrome.storage.local.remove(['session', 'current_recruiter_id', 'current_recruiter_name']);
+            chrome.storage.local.remove(['session', 'current_recruiter_id', 'current_recruiter_name', 'session_validated_at']);
             res({ session: null });
           } else {
+            chrome.storage.local.set({ session_validated_at: now });
             res({ session: result.session });
           }
         })

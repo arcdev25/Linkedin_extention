@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Profile Insight",
-  "version": "5.19.0",
+  "version": "6.1.5",
   "description": "Track recruiter outreach on LinkedIn + auto-highlight keywords everywhere",
   "permissions": [
     "activeTab",
@@ -15,9 +15,15 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["src/content.js"],
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["src/content.js", "src/keyword_highlighter.js"],
       "css": ["src/content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "exclude_matches": ["https://*.linkedin.com/*"],
+      "js": ["src/keyword_highlighter.js"],
       "run_at": "document_idle"
     }
   ],
