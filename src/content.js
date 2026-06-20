@@ -36,6 +36,7 @@
     ], name);
 
     const profileLocation = firstValidLocation([
+      findLocationNearContactInfo(scope, name, headline),
       findLocationByStableSelectors(scope, name, headline),
       findLocationNearName(nameHeading, name, headline),
       structuredData.location
@@ -360,6 +361,46 @@
     return '';
   }
 
+  // LinkedIn consistently renders the location text immediately before the
+  // "Contact info" link/button ("Kyiv, Kyiv City, Ukraine · Contact info").
+  // That link is a far more reliable anchor than scanning nearby elements,
+  // since the top card can also contain small company/school cards (e.g. a
+  // "BOOSTERS" employer badge) whose short, leaf-node text otherwise looks
+  // just as plausible as a real location to a generic proximity scan.
+  function findLocationNearContactInfo(scope, name, headline) {
+    // Match loosely (includes, not ===) and restrict to interactive elements —
+    // LinkedIn sometimes wraps the link text with extra accessible markup.
+    const contactLink = Array.from(scope.querySelectorAll('a, button'))
+      .find(el => cleanText(el.innerText || el.textContent || '').toLowerCase().includes('contact info'));
+    if (!contactLink) return '';
+
+    // The link is often wrapped in its own <span>, so the location text isn't
+    // necessarily contactLink's direct previous sibling — it can be a sibling
+    // of one of its ancestors instead. Walk up a few levels, scanning every
+    // previous sibling at each level (not just the first non-empty one, which
+    // could be a "·" separator or an unrelated badge) until something that
+    // looks like a real location turns up.
+    let node = contactLink;
+    for (let depth = 0; depth < 4 && node; depth++) {
+      let sibling = node.previousElementSibling;
+      while (sibling) {
+        // Skip company/school highlight cards (a link wrapping a logo image)
+        if (sibling.querySelector && sibling.querySelector('img')) {
+          sibling = sibling.previousElementSibling;
+          continue;
+        }
+        const txt = cleanText(sibling.innerText || sibling.textContent || '');
+        if (txt && !/^[·•\u00b7]+$/.test(txt) && !isBadLocation(txt, name, headline)) {
+          return txt;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+      node = node.parentElement;
+    }
+
+    return '';
+  }
+
   function findLocationByStableSelectors(scope, name, headline) {
     const selectors = [
       '[data-anonymize="location"]',
@@ -372,6 +413,8 @@
     for (const selector of selectors) {
       for (const el of scope.querySelectorAll(selector)) {
         if (!isVisible(el)) continue;
+        const card = el.closest('a, button');
+        if (card && card.querySelector('img')) continue;
         const text = cleanText(el.innerText || el.textContent || '');
         if (!isBadLocation(text, name, headline)) return text;
       }
@@ -390,6 +433,12 @@
           .filter(el => el.children.length === 0);
         for (const el of leaves) {
           if (!isVisible(el)) continue;
+          // Skip text that belongs to a company/school card (a clickable
+          // link wrapping a logo image) — e.g. an employer badge like
+          // "BOOSTERS" next to the top card, which otherwise looks just as
+          // plausible as a real location to this proximity-based scan.
+          const card = el.closest('a, button');
+          if (card && card.querySelector('img')) continue;
           const txt = cleanText(el.innerText || el.textContent || '');
           if (!isBadLocation(txt, name, headline)) return txt;
         }

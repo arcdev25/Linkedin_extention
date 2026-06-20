@@ -42,16 +42,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'CHECK_GOOGLE_SHEET_URL') {
     const scriptUrl = 'https://script.google.com/macros/s/AKfycbwzzEBS8iI7zYVmEzHKrtqq53-SmSf8Qw5Cb3FSZakHdAjiS_Oi4DlTJiA5nU9x20bA3w/exec';
 
-    // Apps Script web apps can be very slow to cold-start (multiple seconds,
-    // occasionally longer). Cap it so a slow/hung request can't stall whatever
-    // is waiting on this — the caller treats a timeout the same as "not found".
-    fetch(`${scriptUrl}?url=${encodeURIComponent(msg.url)}`, { signal: AbortSignal.timeout(4000) })
+    // Apps Script web apps can be very slow to cold-start. This check no
+    // longer blocks the panel from rendering (it patches in the blocklist
+    // badge asynchronously), so we can afford a more generous cap here.
+    // A timeout is an expected/handled outcome, not a bug — log it quietly
+    // instead of as a hard error so it doesn't clutter the extension's
+    // error console.
+    fetch(`${scriptUrl}?url=${encodeURIComponent(msg.url)}`, { signal: AbortSignal.timeout(8000) })
       .then(res => res.json())
       .then(data => {
         sendResponse({ exists: data.exists });
       })
       .catch(err => {
-        console.error('Google Sheet check error:', err);
+        console.warn('Google Sheet check skipped:', err.message || err);
         sendResponse({ exists: false, error: err.message });
       });
 
