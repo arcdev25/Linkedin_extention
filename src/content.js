@@ -35,6 +35,12 @@
       parseHeadlineFromDescription(description, name)
     ], name);
 
+    const profileLocation = firstValidLocation([
+      findLocationByStableSelectors(scope, name, headline),
+      findLocationNearName(nameHeading, name, headline),
+      structuredData.location
+    ], name, headline);
+
     // Avatar: check aria-label="Profile photo" div first (confirmed in real LinkedIn HTML)
     // then img[src*="profile-displayphoto"] which is the direct src pattern
     const _photoDiv = document.querySelector('div[aria-label="Profile photo"], a[aria-label="Profile photo"]');
@@ -62,12 +68,14 @@
     console.log('[ProfileChecker] Final extracted data:', {
       name: name || '(not found)',
       headline: headline ? headline.substring(0, 60) + (headline.length > 60 ? '…' : '') : '(not found)',
+      location: profileLocation || '(not found)',
       linkedinId,
     });
 
     return {
       name,
       headline,
+      location: profileLocation,
       avatarUrl: avatar,
       profileUrl: location.href.split('?')[0],
       linkedinId
@@ -79,7 +87,7 @@
   }
 
   function profileDataScore(data) {
-    return (data?.name ? 2 : 0) + (data?.headline ? 2 : 0) + (data?.avatarUrl ? 1 : 0);
+    return (data?.name ? 2 : 0) + (data?.headline ? 2 : 0) + (data?.avatarUrl ? 1 : 0) + (data?.location ? 1 : 0);
   }
 
   async function waitForProfileData(timeoutMs = 4000) {
@@ -87,7 +95,7 @@
     let best = extractProfileData();
 
     // Exit immediately if we already have a perfect score
-    if (profileDataScore(best) >= 5) return best;
+    if (profileDataScore(best) >= 6) return best;
 
     // Use increasing backoff: 150ms, 300ms, 500ms, 750ms, 1000ms…
     const delays = [150, 300, 500, 750, 1000];
@@ -99,7 +107,7 @@
       const next = extractProfileData();
       if (profileDataScore(next) > profileDataScore(best)) best = next;
       // Stop early if we hit a perfect score
-      if (profileDataScore(best) >= 5) break;
+      if (profileDataScore(best) >= 6) break;
     }
 
     return best;
@@ -316,6 +324,97 @@
     return '';
   }
 
+  // ─── Location ──────────────────────────────────────────────────────────────
+  // LinkedIn shows this as free text (e.g. "Austin, Texas, United States",
+  // "London, England, United Kingdom", or just "United States") right under
+  // the headline. There's no separate "country" field on the profile — this
+  // captures whatever LinkedIn displays as the person's location.
+
+  function isBadLocation(value, name = '', headline = '') {
+    const text = cleanText(value);
+    const lower = text.toLowerCase();
+
+    if (!text || text.length < 2 || text.length > 100) return true;
+    if (isConnectionLabel(text)) return true;
+    if (/^\d[\d,.+]*\s+(?:followers|connections)$/i.test(text)) return true;
+    if (/\b(?:followers|connections)\b/i.test(text) && text.length < 50) return true;
+    if (/^(?:contact info|message|connect|follow|more|add profile section|enhance profile|resources|analytics)$/i.test(text)) return true;
+    if (/^(?:open to|verified|premium|linkedin premium)\b/i.test(text)) return true;
+    if (/^(?:about|activity|experience|education|licenses & certifications|recommendations|interests)$/i.test(text)) return true;
+    if (lower.includes('linkedin profile insight')) return true;
+
+    const nameLower = cleanProfileName(name).toLowerCase();
+    if (nameLower && lower === nameLower) return true;
+
+    const headlineLower = cleanText(headline).toLowerCase();
+    if (headlineLower && lower === headlineLower) return true;
+
+    return false;
+  }
+
+  function firstValidLocation(values, name = '', headline = '') {
+    for (const value of values) {
+      const text = cleanText(Array.isArray(value) ? value.join(' ') : value);
+      if (!isBadLocation(text, name, headline)) return text;
+    }
+    return '';
+  }
+
+  function findLocationByStableSelectors(scope, name, headline) {
+    const selectors = [
+      '[data-anonymize="location"]',
+      '.text-body-small.inline.t-black--light.break-words',
+      '.pv-text-details__left-panel .text-body-small.inline',
+      '.pv-top-card--list-bullet .text-body-small',
+      '.pv-top-card-section__location'
+    ];
+
+    for (const selector of selectors) {
+      for (const el of scope.querySelectorAll(selector)) {
+        if (!isVisible(el)) continue;
+        const text = cleanText(el.innerText || el.textContent || '');
+        if (!isBadLocation(text, name, headline)) return text;
+      }
+    }
+
+    return '';
+  }
+
+  function findLocationNearName(nameEl, name, headline) {
+    // Location is typically rendered as a leaf <span>/<div> directly below
+    // the headline, inside the same top-card container as the name.
+    if (nameEl) {
+      let container = nameEl.parentElement;
+      for (let i = 0; i < 6 && container; i++) {
+        const leaves = Array.from(container.querySelectorAll('span, div'))
+          .filter(el => el.children.length === 0);
+        for (const el of leaves) {
+          if (!isVisible(el)) continue;
+          const txt = cleanText(el.innerText || el.textContent || '');
+          if (!isBadLocation(txt, name, headline)) return txt;
+        }
+        container = container.parentElement;
+      }
+    }
+
+    // Fallback: text-based scan — location usually appears within a couple
+    // of lines right after the headline in the top card's text content.
+    const container = findProfileContainer(nameEl);
+    const lines = readLines(container);
+    const cleanHeadline = cleanText(headline).toLowerCase();
+    const headlineIndex = cleanHeadline
+      ? lines.findIndex(line => cleanText(line).toLowerCase() === cleanHeadline)
+      : -1;
+    const start = headlineIndex >= 0 ? headlineIndex + 1 : 0;
+    const end = Math.min(lines.length, start + 4);
+
+    for (let i = start; i < end; i += 1) {
+      if (!isBadLocation(lines[i], name, headline)) return lines[i];
+    }
+
+    return '';
+  }
+
   function parseProfileTitle(value) {
     let title = cleanText(value)
       .replace(/\s*\|\s*LinkedIn.*$/i, '')
@@ -342,7 +441,14 @@
 
     function valueToText(value) {
       if (Array.isArray(value)) return value.map(valueToText).filter(Boolean).join(' ');
-      if (value && typeof value === 'object') return cleanText(value.name || value.title || value.description || '');
+      if (value && typeof value === 'object') {
+        // PostalAddress-shaped objects (used for homeLocation/address) don't
+        // have a name/title/description — build a readable string from parts.
+        if (value.addressLocality || value.addressRegion || value.addressCountry) {
+          return cleanText([value.addressLocality, value.addressRegion, value.addressCountry].filter(Boolean).join(', '));
+        }
+        return cleanText(value.name || value.title || value.description || '');
+      }
       return cleanText(value);
     }
 
@@ -354,6 +460,7 @@
         result.name ||= valueToText(node.name);
         result.headline ||= valueToText(node.headline || node.description);
         result.jobTitle ||= valueToText(node.jobTitle);
+        result.location ||= valueToText(node.homeLocation || node.address || node.workLocation);
       }
 
       if (Array.isArray(node)) {
@@ -456,11 +563,13 @@
     const storedProfile = stored || {};
     const name = firstValidName([extracted.name, storedProfile.name]);
     const headline = firstValidHeadline([extracted.headline, storedProfile.headline], name);
+    const profileLocation = firstValidLocation([extracted.location, storedProfile.location], name, headline);
 
     return {
       ...extracted,
       name,
       headline,
+      location: profileLocation,
       avatarUrl: extracted.avatarUrl || storedProfile.avatar_url || '',
       profileUrl: extracted.profileUrl || storedProfile.profile_url || location.href.split('?')[0]
     };
@@ -475,6 +584,25 @@
       });
     });
   }
+
+  // GET_CONFIG was being called 2-3 times per panel render (loadOverlayData,
+  // loadHighlightsSection, saveHighlight), each a round trip to the (possibly
+  // sleeping) service worker. Cache it for this page and invalidate only when
+  // something that affects it actually changes.
+  let cachedConfig = null;
+  function getConfig() {
+    if (cachedConfig) return Promise.resolve(cachedConfig);
+    return msg('GET_CONFIG').then(c => { cachedConfig = c; return c; });
+  }
+  if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && (changes.current_recruiter_id || changes.current_recruiter_name || changes.session)) {
+        cachedConfig = null;
+      }
+    });
+  }
+
+  const BLOCKLIST_ICON = `<svg class="lpc-blocklist-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30" style="display:inline-block;vertical-align:middle;margin-right:6px;"><path fill="#A82C1F" fill-rule="nonzero" d="M256 0c70.686 0 134.69 28.658 181.016 74.984C483.342 121.31 512 185.314 512 256c0 70.686-28.658 134.69-74.984 181.016C390.69 483.342 326.686 512 256 512c-70.686 0-134.69-28.658-181.016-74.984C28.658 390.69 0 326.686 0 256c0-70.686 28.658-134.69 74.984-181.016C121.31 28.658 185.314 0 256 0z"/><circle fill="#D03827" cx="256" cy="256" r="226.536"/><path fill="#fff" fill-rule="nonzero" d="M275.546 302.281c-.88 22.063-38.246 22.092-39.099-.007-3.779-37.804-13.444-127.553-13.136-163.074.312-10.946 9.383-17.426 20.99-19.898 3.578-.765 7.512-1.136 11.476-1.132 3.987.007 7.932.4 11.514 1.165 11.989 2.554 21.402 9.301 21.398 20.444l-.044 1.117-13.099 161.385zm-19.55 39.211c14.453 0 26.168 11.717 26.168 26.171 0 14.453-11.715 26.167-26.168 26.167s-26.171-11.714-26.171-26.167c0-14.454 11.718-26.171 26.171-26.171z"/></svg>`;
 
   const STATUS_CONFIG = {
     pending:    { label: 'Pending',    color: '#F59E0B', bg: '#FEF3C7', icon: '⏳' },
@@ -567,7 +695,7 @@
     const linkedinId = getLinkedInId();
     if (!linkedinId || !text) return;
 
-    const config = await msg('GET_CONFIG');
+    const config = await getConfig();
     if (!config.current_recruiter_id) {
       alert('[Profile Checker] Select your recruiter account first.');
       return;
@@ -663,7 +791,7 @@
     if (!container) return;
 
     const linkedinId = getLinkedInId();
-    const config = await msg('GET_CONFIG');
+    const config = await getConfig();
     if (!config.current_recruiter_id) {
       container.innerHTML = '<div class="lpc-empty-other">Select your account to see highlights.</div>';
       return;
@@ -805,20 +933,18 @@
       type: 'CHECK_GOOGLE_SHEET_URL',
       url: cleanUrl
     });
-    console.log('isExist--', resp)
     return resp?.exists === true;
   }
 
-function renderContent(profileData, dbData, config, existingBlocklist) {
-    const { contacts } = dbData;
-    const myContact = contacts?.find(c => c.recruiter_id === config.current_recruiter_id);
-    const otherContacts = contacts?.filter(c => c.recruiter_id !== config.current_recruiter_id) || [];
-
-    const blocklistIcon = `<svg class="lpc-blocklist-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30" style="display:inline-block;vertical-align:middle;margin-right:6px;"><path fill="#A82C1F" fill-rule="nonzero" d="M256 0c70.686 0 134.69 28.658 181.016 74.984C483.342 121.31 512 185.314 512 256c0 70.686-28.658 134.69-74.984 181.016C390.69 483.342 326.686 512 256 512c-70.686 0-134.69-28.658-181.016-74.984C28.658 390.69 0 326.686 0 256c0-70.686 28.658-134.69 74.984-181.016C121.31 28.658 185.314 0 256 0z"/><circle fill="#D03827" cx="256" cy="256" r="226.536"/><path fill="#fff" fill-rule="nonzero" d="M275.546 302.281c-.88 22.063-38.246 22.092-39.099-.007-3.779-37.804-13.444-127.553-13.136-163.074.312-10.946 9.383-17.426 20.99-19.898 3.578-.765 7.512-1.136 11.476-1.132 3.987.007 7.932.4 11.514 1.165 11.989 2.554 21.402 9.301 21.398 20.444l-.044 1.117-13.099 161.385zm-19.55 39.211c14.453 0 26.168 11.717 26.168 26.171 0 14.453-11.715 26.167-26.168 26.167s-26.171-11.714-26.171-26.167c0-14.454 11.718-26.171 26.171-26.171z"/></svg>`;
-
-    const statusOptions = Object.entries(STATUS_CONFIG)
-      .map(([key, v]) => `<option value="${key}" ${myContact?.status === key ? 'selected' : ''}>${v.icon} ${v.label}</option>`)
-      .join('');
+function renderBlocklistArea(existingBlocklist, otherContacts, blocklistIcon) {
+    if (existingBlocklist) {
+      return `
+        <div class="lpc-blocklist-warning">
+          ${blocklistIcon}
+          <span>This profile is in your blocklist</span>
+        </div>
+      `;
+    }
 
     const otherHtml = otherContacts.length
       ? otherContacts.map(c => {
@@ -835,6 +961,21 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
             </div>`;
         }).join('')
       : '<div class="lpc-empty-other">No other recruiters contacted this profile.</div>';
+
+    return `
+      <div class="lpc-section-title">Other Recruiters (${otherContacts.length})</div>
+      <div class="lpc-others-section">${otherHtml}</div>
+    `;
+}
+
+function renderContent(profileData, dbData, config, existingBlocklist) {
+    const { contacts } = dbData;
+    const myContact = contacts?.find(c => c.recruiter_id === config.current_recruiter_id);
+    const otherContacts = contacts?.filter(c => c.recruiter_id !== config.current_recruiter_id) || [];
+
+    const statusOptions = Object.entries(STATUS_CONFIG)
+      .map(([key, v]) => `<option value="${key}" ${myContact?.status === key ? 'selected' : ''}>${v.icon} ${v.label}</option>`)
+      .join('');
 
     // Format the date this recruiter first contacted the profile
     const myContactDate = myContact?.contacted_at
@@ -854,6 +995,7 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
         <div class="lpc-profile-info">
           <div class="lpc-profile-name">${profileData.name || 'Name not found'}</div>
           <div class="lpc-profile-headline">${profileData.headline || 'No headline available'}</div>
+          ${profileData.location ? `<div class="lpc-profile-location">📍 ${profileData.location}</div>` : ''}
         </div>
       </div>
 
@@ -868,15 +1010,7 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
           </div>
         ` : ''}
 
-        ${existingBlocklist ? `
-          <div class="lpc-blocklist-warning">
-            ${blocklistIcon}
-            <span>This profile is in your blocklist</span>
-          </div>
-        ` : `
-          <div class="lpc-section-title">Other Recruiters (${otherContacts.length})</div>
-          <div class="lpc-others-section">${otherHtml}</div>
-        `}
+        <div id="lpc-blocklist-area">${renderBlocklistArea(existingBlocklist, otherContacts, BLOCKLIST_ICON)}</div>
 
         <div class="lpc-field-row">
           <label>Status</label>
@@ -901,15 +1035,19 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
     content.style.display = 'none';
 
     try {
-      // Kick off all async work in parallel — profile data extraction,
-      // config/DB fetch, and blocklist check all run concurrently.
+      // Profile extraction, config, and the contacts DB lookup all run
+      // concurrently and are all fast/local-ish. The blocklist check hits an
+      // external Google Apps Script endpoint, which can be slow (multi-second
+      // cold starts are common) or occasionally hang — it used to be in this
+      // same Promise.all, which meant the whole panel sat on its loading
+      // spinner until that one slow call finished. Now we render as soon as
+      // the fast stuff is ready and patch in the blocklist result afterward.
       const linkedinId = getLinkedInId();
 
-      const [profileData, configResp, profileResp, existingBlocklist] = await Promise.all([
+      const [profileData, configResp, profileResp] = await Promise.all([
         waitForProfileData(),
-        msg('GET_CONFIG'),
-        msg('GET_PROFILE', { linkedinId }),
-        checkGoogleSheetUrl()
+        getConfig(),
+        msg('GET_PROFILE', { linkedinId })
       ]);
 
       if (!configResp.supabase_url) {
@@ -921,7 +1059,20 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
 
       const mergedProfile = mergeProfileData(profileData, profileResp.profile);
       const contacts = profileResp.profile?.contacts || [];
-      content.innerHTML = renderContent(mergedProfile, { contacts }, configResp, existingBlocklist);
+      content.innerHTML = renderContent(mergedProfile, { contacts }, configResp, false);
+
+      // Blocklist check runs in the background; only touches the DOM if this
+      // overlay/profile is still the one on screen by the time it resolves.
+      const blocklistProfileId = linkedinId;
+      checkGoogleSheetUrl().then(isBlocklisted => {
+        if (!isBlocklisted) return;
+        if (getLinkedInId() !== blocklistProfileId) return;
+        const area = overlayEl?.querySelector('#lpc-blocklist-area');
+        if (area) {
+          const otherContacts = contacts.filter(c => c.recruiter_id !== configResp.current_recruiter_id);
+          area.innerHTML = renderBlocklistArea(true, otherContacts, BLOCKLIST_ICON);
+        }
+      }).catch(() => {});
 
       const saveBtn = content.querySelector('#lpc-save-btn');
       const statusSelect = content.querySelector('#lpc-status-select');

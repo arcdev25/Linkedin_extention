@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   linkedin_id TEXT UNIQUE NOT NULL,
   name        TEXT DEFAULT '',
   headline    TEXT DEFAULT '',
+  location    TEXT DEFAULT '',
   profile_url TEXT DEFAULT '',
   avatar_url  TEXT DEFAULT '',
   created_at  TIMESTAMPTZ DEFAULT now(),
@@ -96,4 +97,5 @@ ALTER TABLE keywords DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE recruiters DROP COLUMN IF EXISTS owner_name;
 -- ALTER TABLE recruiters ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES owners(id);
 -- CREATE TABLE IF NOT EXISTS keywords (...); ← new
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS location TEXT DEFAULT ''; ← new
 -- ============================================================

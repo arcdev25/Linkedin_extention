@@ -1,5 +1,17 @@
 importScripts("config.js");
-importScripts("bcrypt.min.js");
+
+// bcrypt.min.js (~24KB) is only needed for the login flow. MV3 service workers
+// are killed after ~30s idle and re-spawn on the next message, re-parsing
+// everything imported at the top level. Loading bcrypt lazily means the
+// dozens of lightweight messages (GET_CONFIG, GET_PROFILE, keyword fetches,
+// etc.) that fire on every page load don't pay that parse cost.
+let bcryptLoaded = false;
+function ensureBcrypt() {
+  if (!bcryptLoaded) {
+    importScripts("bcrypt.min.js");
+    bcryptLoaded = true;
+  }
+}
 
 // ─── Message router ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -30,11 +42,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'CHECK_GOOGLE_SHEET_URL') {
     const scriptUrl = 'https://script.google.com/macros/s/AKfycbwzzEBS8iI7zYVmEzHKrtqq53-SmSf8Qw5Cb3FSZakHdAjiS_Oi4DlTJiA5nU9x20bA3w/exec';
 
-    fetch(`${scriptUrl}?url=${encodeURIComponent(msg.url)}`)
+    // Apps Script web apps can be very slow to cold-start (multiple seconds,
+    // occasionally longer). Cap it so a slow/hung request can't stall whatever
+    // is waiting on this — the caller treats a timeout the same as "not found".
+    fetch(`${scriptUrl}?url=${encodeURIComponent(msg.url)}`, { signal: AbortSignal.timeout(4000) })
       .then(res => res.json())
       .then(data => {
         sendResponse({ exists: data.exists });
-        console.log('data.exists------------', data.exists)
       })
       .catch(err => {
         console.error('Google Sheet check error:', err);
@@ -80,21 +94,24 @@ function buildProfilePayload(data, existing = {}) {
   const headline = cleanProfileText(data.headline, ['No headline available', 'Headline not found']);
   const profileUrl = cleanProfileText(data.profileUrl);
   const avatarUrl = cleanProfileText(data.avatarUrl);
+  const location = cleanProfileText(data.location);
   const existingName = cleanProfileText(existing.name, ['Name not found']);
   const existingHeadline = cleanProfileText(existing.headline, ['No headline available', 'Headline not found']);
+  const existingLocation = cleanProfileText(existing.location);
 
   return {
     linkedin_id: data.linkedinId,
     name: name || existingName || '',
     headline: headline || existingHeadline || '',
     profile_url: profileUrl || existing.profile_url || '',
-    avatar_url: avatarUrl || existing.avatar_url || ''
+    avatar_url: avatarUrl || existing.avatar_url || '',
+    location: location || existingLocation || ''
   };
 }
 
 async function upsertProfile(req, data) {
   const existingProfiles = await req(
-    `profiles?linkedin_id=eq.${encodeURIComponent(data.linkedinId)}&select=id,name,headline,profile_url,avatar_url`
+    `profiles?linkedin_id=eq.${encodeURIComponent(data.linkedinId)}&select=id,name,headline,profile_url,avatar_url,location`
   );
   const existingProfile = existingProfiles?.[0] || {};
 
@@ -125,7 +142,8 @@ async function handleLogin(email, password) {
   // Check status BEFORE password (cheaper check first)
   if (owner.status !== 'active') throw new Error('Your account is disabled. Contact admin.');
 
-  // bcryptjs is loaded via importScripts — dcodeIO.bcrypt is the global
+  // bcryptjs is lazy-loaded here (only the login path needs it) — dcodeIO.bcrypt is the global
+  ensureBcrypt();
   const bcrypt = dcodeIO.bcrypt;
   const passwordMatch = await bcrypt.compare(password, owner.password);
   if (!passwordMatch) throw new Error('Incorrect password.');
@@ -253,23 +271,51 @@ async function handleAddKeyword(ownerId, word, colorId) {
     { owner_id: ownerId, word: word.trim(), color_id: colorId || 'yellow' },
     { 'Prefer': 'return=representation' }
   );
+  await chrome.storage.local.remove('keywords_cache');
   return { keyword: Array.isArray(rows) ? rows[0] : rows };
 }
 
 async function handleDeleteKeyword(id) {
   const { req } = getClient();
   await req(`keywords?id=eq.${id}`, 'DELETE');
+  await chrome.storage.local.remove('keywords_cache');
   return { success: true };
 }
 
 // Get ALL keywords from ALL owners (for page highlighting — everyone's keywords)
+//
+// This used to fire a Supabase request on EVERY page load on EVERY site (the
+// content script matches https://*/* and http://*/*), which is the main
+// reason the extension felt slow everywhere, not just on LinkedIn. Keywords
+// change rarely, so we cache them locally and only refetch when stale or
+// explicitly invalidated (see handleAddKeyword/handleDeleteKeyword below).
+const KEYWORDS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 async function handleGetKeywordsForPage() {
-  const session = await new Promise(res => chrome.storage.local.get(['session'], r => res(r.session)));
+  const { session, keywords_cache } = await new Promise(res =>
+    chrome.storage.local.get(['session', 'keywords_cache'], res)
+  );
   if (!session) return { keywords: [] };
+
+  const now = Date.now();
+  if (
+    keywords_cache &&
+    keywords_cache.ownerId === session.id &&
+    (now - keywords_cache.fetchedAt) < KEYWORDS_CACHE_TTL_MS
+  ) {
+    return { keywords: keywords_cache.keywords };
+  }
+
   const { req } = getClient();
   // Only current user's keywords on pages
   const kws = await req(`keywords?owner_id=eq.${session.id}&select=*`);
-  return { keywords: kws || [] };
+  const keywords = kws || [];
+
+  await chrome.storage.local.set({
+    keywords_cache: { ownerId: session.id, keywords, fetchedAt: now }
+  });
+
+  return { keywords };
 }
 
 

@@ -136,6 +136,16 @@
   overflow: hidden;
 }
 
+.lpc-profile-location {
+  font-size: 10.5px;
+  color: #9ca3af;
+  margin-top: 3px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Sections */
 .lpc-section-title {
   font-size: 10px;
