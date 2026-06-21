@@ -1194,19 +1194,48 @@ function renderContent(profileData, dbData, config, existingBlocklist) {
     loadOverlayData();
   }
 
-  let lastPath = location.pathname;
-  let debounceTimeout;
+  // -------------------- LinkedIn SPA navigation detection --------------------
 
-  // Only watch for childList changes at the top level — LinkedIn SPA navigation
-  // changes the URL and swaps top-level children, so we don't need subtree here.
-  new MutationObserver(() => {
-    if (location.pathname !== lastPath) {
-      lastPath = location.pathname;
+  let lastUrl = location.href;
+  let debounceTimeout = null;
+
+  function scheduleCheck(delay = 1000) {
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(() => {
+      checkAndInject();
+    }, delay);
+  }
+
+  function handleUrlChange() {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+
       removeHighlightMenu();
-      clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(checkAndInject, 500);
+
+      if (overlayEl) {
+        overlayEl.remove();
+        overlayEl = null;
+      }
+
+      currentProfileId = null;
+
+      scheduleCheck();
     }
-  }).observe(document.body, { childList: true, subtree: false });
+  }
+
+  // Initial load
+  scheduleCheck(1500);
+
+  // LinkedIn internal navigation
+  setInterval(handleUrlChange, 500);
+
+  // Watch DOM changes deeply
+  new MutationObserver(() => {
+    handleUrlChange();
+  }).observe(document.body, {
+    childList: true,
+    subtree: true
+  });
 
   // Initial injection — short delay to let LinkedIn's React hydrate
   if (document.readyState === 'loading') {
