@@ -1,17 +1,5 @@
 importScripts("config.js");
-
-// bcrypt.min.js (~24KB) is only needed for the login flow. MV3 service workers
-// are killed after ~30s idle and re-spawn on the next message, re-parsing
-// everything imported at the top level. Loading bcrypt lazily means the
-// dozens of lightweight messages (GET_CONFIG, GET_PROFILE, keyword fetches,
-// etc.) that fire on every page load don't pay that parse cost.
-let bcryptLoaded = false;
-function ensureBcrypt() {
-  if (!bcryptLoaded) {
-    importScripts("bcrypt.min.js");
-    bcryptLoaded = true;
-  }
-}
+importScripts("bcrypt.min.js");
 
 // ─── Message router ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -145,8 +133,7 @@ async function handleLogin(email, password) {
   // Check status BEFORE password (cheaper check first)
   if (owner.status !== 'active') throw new Error('Your account is disabled. Contact admin.');
 
-  // bcryptjs is lazy-loaded here (only the login path needs it) — dcodeIO.bcrypt is the global
-  ensureBcrypt();
+  // bcryptjs is loaded via importScripts — dcodeIO.bcrypt is the global
   const bcrypt = dcodeIO.bcrypt;
   const passwordMatch = await bcrypt.compare(password, owner.password);
   if (!passwordMatch) throw new Error('Incorrect password.');
